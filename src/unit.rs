@@ -1,7 +1,7 @@
 use std::{fmt::Display, ops::{Add, Mul, Sub}};
 use crate::util::{round_eps, EPSILON};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Unit {
     cm: f64,
     g: f64,
@@ -9,15 +9,19 @@ pub struct Unit {
 }
 
 impl Unit {
-    pub fn parse(unit: &str) -> Self {
-        unimplemented!()
-    }
-
     pub fn one() -> Self {
         Self {
             cm: 0.,
             g: 0.,
             s: 0.,
+        }
+    }
+
+    pub fn new(vals: [f64; 3]) -> Self {
+        Self {
+            cm: vals[0],
+            g: vals[1],
+            s: vals[2],
         }
     }
 
@@ -29,19 +33,31 @@ impl Unit {
 impl Add for Unit {
     type Output=Self;
     fn add(self, rhs: Self) -> Self::Output {
-        todo!()
+        Self {
+            cm: self.cm + rhs.cm,
+            g: self.g + rhs.g,
+            s: self.s + rhs.s,
+        }
     }
 }
 impl Mul<f64> for Unit {
     type Output=Self;
     fn mul(self, rhs: f64) -> Self::Output {
-        todo!()
+        Self {
+            cm: self.cm * rhs,
+            g: self.g * rhs,
+            s: self.s * rhs,
+        }
     }
 }
 impl Sub for Unit {
     type Output=Self;
     fn sub(self, rhs: Self) -> Self::Output {
-        todo!()
+        Self {
+            cm: self.cm - rhs.cm,
+            g: self.g - rhs.g,
+            s: self.s - rhs.s,
+        }
     }
 }
 impl PartialEq for Unit {
