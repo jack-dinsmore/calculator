@@ -55,13 +55,20 @@ impl Number {
             return Err(());
         }
 
-        // Find the first index of a non-number character
+        // Find the first index of a non-number character assuming e is an exponential
         let mut first_str_index = None;
         for (i, c) in s.chars().enumerate() {
             if '0' <= c && c < '9' {continue;}
-            if let None = first_str_index {
-                if c == '.' || c == '_' || c == 'e' || c == 'E' || c == '-' {
-                    continue;
+            if i > 0 && (c == '.' || c == '_' || c == '-') {continue;}
+            if i > 0 && (c == 'e' || c == 'E') {
+                // Check if next character is alphanumeric
+                match s.chars().nth(i+1) {
+                    Some(cc) => {
+                        if '0' <= cc && cc < '9' {continue;} // The e is an exponential
+                        if i > 0 && (cc == '.' || cc == '_' || cc == '-') {continue;} // The e is an exponential
+                        () // The e is a character
+                    },
+                    None => (), // the e is a character
                 }
             }
             first_str_index = Some(i);

@@ -51,16 +51,31 @@ lazy_static! {
 
     static ref UNITS: HashMap<&'static str, Number> = {
         let mut a = HashMap::new();
-        // Fundamental units, CGS
-        a.insert("cm", Number { q:1., u: Unit::new([1., 0., 0.])});
-        a.insert("g", Number { q:1., u: Unit::new([0., 1., 0.])});
-        a.insert("s", Number { q:1., u: Unit::new([0., 0., 1.])});
-        a.insert("G", Number { q:1., u: Unit::new([-0.5, 0.5, -1.])});
-        a.insert("esu", Number { q:1., u: Unit::new([1.5, -0.5, -1.])});
-        a.insert("erg", Number { q:1., u: Unit::new([2., 1., -2.])});
-        a.insert("dyn", Number { q:1., u: Unit::new([1., 1., -1.])});
 
-        // eV
+        // Length
+        a.insert("cm", Number { q:1., u: Unit::new([1., 0., 0.])});
+        a.insert("m", Number { q:1e2, u: Unit::new([1., 0., 0.])});
+        a.insert("km", Number { q:1e5, u: Unit::new([1., 0., 0.])});
+        a.insert("pc", Number { q:3.086e18, u: Unit::new([1., 0., 0.])});
+        a.insert("ly", Number { q:9.461e17, u: Unit::new([1., 0., 0.])});
+        a.insert("AU", Number { q:1.496e13, u: Unit::new([1., 0., 0.])});
+        
+        // Mass
+        a.insert("g", Number { q:1., u: Unit::new([0., 1., 0.])});
+        a.insert("msun", Number { q: 1.989e33, u: Unit::new([0., 1., 0.])});
+        a.insert("kg", Number { q: 1e3, u: Unit::new([0., 1., 0.])});
+
+        // Time
+        a.insert("s", Number { q:1., u: Unit::new([0., 0., 1.])});
+        a.insert("min", Number { q:60., u: Unit::new([0., 0., 1.])});
+        a.insert("hr", Number { q:3600., u: Unit::new([0., 0., 1.])});
+        a.insert("d", Number { q:3600.*24., u: Unit::new([0., 0., 1.])});
+        a.insert("yr", Number { q:3600.*24.*365.25, u: Unit::new([0., 0., 1.])});
+        a.insert("kyr", Number { q:3600.*24.*365.25*1000., u: Unit::new([0., 0., 1.])});
+
+        // Energy
+        a.insert("lsun", Number { q: 3.839e33, u: Unit::new([2., 1., -2.])});
+        a.insert("erg", Number { q:1., u: Unit::new([2., 1., -2.])});
         a.insert("meV", Number { q:1.60218e-15, u: Unit::new([2., 1., -2.])});
         a.insert("eV", Number { q:1.60218e-12, u: Unit::new([2., 1., -2.])});
         a.insert("keV", Number { q:1.60218e-9, u: Unit::new([2., 1., -2.])});
@@ -69,23 +84,12 @@ lazy_static! {
         a.insert("TeV", Number { q:1.60218, u: Unit::new([2., 1., -2.])});
         a.insert("PeV", Number { q:1.60218e3, u: Unit::new([2., 1., -2.])});
         a.insert("EeV", Number { q:1.60218e6, u: Unit::new([2., 1., -2.])});
-
-        // Length
-        a.insert("pc", Number { q:3.086e18, u: Unit::new([1., 0., 0.])});
-        a.insert("ly", Number { q:9.461e17, u: Unit::new([1., 0., 0.])});
-        a.insert("AU", Number { q:1.496e13, u: Unit::new([1., 0., 0.])});
-
-        // Time
-        a.insert("min", Number { q:60., u: Unit::new([0., 0., 1.])});
-        a.insert("hr", Number { q:3600., u: Unit::new([0., 0., 1.])});
-        a.insert("d", Number { q:3600.*24., u: Unit::new([0., 0., 1.])});
-        a.insert("yr", Number { q:3600.*24.*365.25, u: Unit::new([0., 0., 1.])});
-        a.insert("kyr", Number { q:3600.*24.*365.25*1000., u: Unit::new([0., 0., 1.])});
-
-        // Bodies
-        a.insert("msun", Number { q: 1.989e33, u: Unit::new([0., 1., 0.])});
-        a.insert("lsun", Number { q: 3.839e33, u: Unit::new([2., 1., -2.])});
         
+        // E&M
+        a.insert("G", Number { q:1., u: Unit::new([-0.5, 0.5, -1.])});
+        a.insert("esu", Number { q:1., u: Unit::new([1.5, -0.5, -1.])});
+        a.insert("dyn", Number { q:1., u: Unit::new([1., 1., -1.])});
+
         a
     };
 }

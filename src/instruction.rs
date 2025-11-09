@@ -117,6 +117,9 @@ impl Instruction {
                 Ok(match FUNCTIONS.get(func.as_str()) {
                     Some((f, unit_mult)) => {
                         let n = children[0].calculate()?;
+                        if *unit_mult == 0. && !n.u.is_one()  {
+                            return Err(anyhow!("You cannot call {} on a number with units", func))
+                        }
                         Number { q: f(n.q), u: n.u * *unit_mult }
                     },
                     None => return Err(anyhow!("The function {} is not supported", func))
