@@ -1,342 +1,159 @@
-use std::{io::Write, ops::DerefMut};
-use anyhow::{anyhow, Result};
+use std::collections::HashMap;
+use lazy_static::lazy_static;
+use rustyline::{DefaultEditor, Config, EditMode};
 
 mod util;
 mod unit;
 mod number;
-use number::Number;
-use unit::Unit;
+mod instruction;
+mod parse;
+use parse::parse;
 
-const MAX_ARGS: usize = 8;
+use crate::{number::Number, unit::Unit};
 
-#[derive(Clone, Debug)]
-enum Operator {
-    Working,
-    Number(Number),
-    Identity,
-    Mul,
-    Div,
-    Add,
-    Sub,
-    Neg,
-    Expon,
-    Func(String)
+lazy_static! {
+    static ref NUMBERS: HashMap<&'static str, f64> = {
+        let mut a = HashMap::new();
+        a.insert("pi", std::f64::consts::PI);
+        a.insert("e", std::f64::consts::E);
+        a.insert("egamma", 0.5772156649015328606065120900824024310421593359);
+        a
+    };
+    static ref CONSTANTS: HashMap<&'static str, Number> = {
+        let mut a = HashMap::new();
+        a.insert("electron_mass",  Number { q: 9.1093897e-28, u: Unit::new([0., 1., 0.])});
+        a.insert("proton_mass", Number { q: 1.6726231e-24, u: Unit::new([0., 1., 0.])});
+        a.insert("electron_charge", Number { q: 4.8032068e-10, u: Unit::new([1.5, -0.5, -1.])});
+        a.insert("GN", Number { q: 6.6743e-8, u: Unit::new([3., -1., -2.])});
+        a.insert("h", Number { q: (2.*std::f64::consts::PI)*1.05457266e-27, u: Unit::new([2., 1., -1.])});
+        a.insert("hbar", Number { q: 1.05457266e-27, u: Unit::new([2., 1., -1.])});
+        a.insert("c", Number { q: 2.99792458e10, u: Unit::new([1., 0., -1.])});
+        a.insert("kb", Number { q: 1.3807e-16, u: Unit::new([2., 1., -2.])}); // Also times K^-1
+        a
+    };
+    static ref FUNCTIONS: HashMap<&'static str, (fn(f64)->f64, f64)> = {
+        let mut a: HashMap<&'static str, (fn(f64)->f64, f64)> = HashMap::new();
+        a.insert("sqrt", (|x| x.sqrt(), 0.5));
+        a.insert("cbrt", (|x| x.cbrt(), 1./3.));
+        a.insert("sin", (|x| x.sin(), 0.));
+        a.insert("cos", (|x| x.cos(), 0.));
+        a.insert("tan", (|x| x.tan(), 0.));
+        a.insert("asin", (|x| x.asin(), 0.));
+        a.insert("acos", (|x| x.acos(), 0.));
+        a.insert("atan", (|x| x.atan(), 0.));
+        a.insert("fact", (|x| puruspe::gamma(x+1.), 0.));
+        a.insert("gamma", (|x| puruspe::gamma(x), 0.));
+        a
+    };
+
+    static ref UNITS: HashMap<&'static str, Number> = {
+        let mut a = HashMap::new();
+        // Fundamental units, CGS
+        a.insert("cm", Number { q:1., u: Unit::new([1., 0., 0.])});
+        a.insert("g", Number { q:1., u: Unit::new([0., 1., 0.])});
+        a.insert("s", Number { q:1., u: Unit::new([0., 0., 1.])});
+        a.insert("G", Number { q:1., u: Unit::new([-0.5, 0.5, -1.])});
+        a.insert("esu", Number { q:1., u: Unit::new([1.5, -0.5, -1.])});
+        a.insert("erg", Number { q:1., u: Unit::new([2., 1., -2.])});
+        a.insert("dyn", Number { q:1., u: Unit::new([1., 1., -1.])});
+
+        // eV
+        a.insert("meV", Number { q:1.60218e-15, u: Unit::new([2., 1., -2.])});
+        a.insert("eV", Number { q:1.60218e-12, u: Unit::new([2., 1., -2.])});
+        a.insert("keV", Number { q:1.60218e-9, u: Unit::new([2., 1., -2.])});
+        a.insert("MeV", Number { q:1.60218e-6, u: Unit::new([2., 1., -2.])});
+        a.insert("GeV", Number { q:1.60218e-3, u: Unit::new([2., 1., -2.])});
+        a.insert("TeV", Number { q:1.60218, u: Unit::new([2., 1., -2.])});
+        a.insert("PeV", Number { q:1.60218e3, u: Unit::new([2., 1., -2.])});
+        a.insert("EeV", Number { q:1.60218e6, u: Unit::new([2., 1., -2.])});
+
+        // Length
+        a.insert("pc", Number { q:3.086e18, u: Unit::new([1., 0., 0.])});
+        a.insert("ly", Number { q:9.461e17, u: Unit::new([1., 0., 0.])});
+        a.insert("AU", Number { q:1.496e13, u: Unit::new([1., 0., 0.])});
+
+        // Time
+        a.insert("min", Number { q:60., u: Unit::new([0., 0., 1.])});
+        a.insert("hr", Number { q:3600., u: Unit::new([0., 0., 1.])});
+        a.insert("d", Number { q:3600.*24., u: Unit::new([0., 0., 1.])});
+        a.insert("yr", Number { q:3600.*24.*365.25, u: Unit::new([0., 0., 1.])});
+        a.insert("kyr", Number { q:3600.*24.*365.25*1000., u: Unit::new([0., 0., 1.])});
+
+        // Bodies
+        a.insert("msun", Number { q: 1.989e33, u: Unit::new([0., 1., 0.])});
+        a.insert("lsun", Number { q: 3.839e33, u: Unit::new([2., 1., -2.])});
+        
+        a
+    };
 }
 
-impl Operator {
-    fn get_label(&self) -> usize {
-        match self {
-            Operator::Working => 0,
-            Operator::Number(_) => 0,
-            Operator::Identity => 5,
-            Operator::Mul => 2,
-            Operator::Div => 2,
-            Operator::Add => 1,
-            Operator::Sub => 1,
-            Operator::Neg => 4,
-            Operator::Expon => 3,
-            Operator::Func(_) => 0,
-        }
+fn print_help() {
+    println!("NUMBERS: ");
+    for k in NUMBERS.keys() {
+        println!("{}", k);
     }
-}
+    println!("");
 
-impl PartialEq for Operator {
-    fn eq(&self, other: &Self) -> bool {
-        self.get_label() == other.get_label()
+    println!("CONSTANTS: ");
+    for k in CONSTANTS.keys() {
+        println!("{}", k);
     }
-}
+    println!("");
 
-impl PartialOrd for Operator {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.get_label().cmp(&other.get_label()))
+    println!("FUNCTIONS: ");
+    for k in FUNCTIONS.keys() {
+        println!("{}", k);
     }
-}
+    println!("");
 
-#[derive(Clone, Debug)]
-struct Instruction {
-    operator: Operator,
-    parent: *mut Instruction,
-    children: Option<Box<[Instruction; MAX_ARGS]>>,
-}
-
-impl Instruction {
-    fn head() -> Self {
-        Self {
-            operator: Operator::Identity,
-            parent: std::ptr::null::<Instruction>() as *mut Instruction,
-            children: Self::empty_children(std::ptr::null::<Instruction>() as *mut Instruction),
-        }
-    }
-
-    fn empty_children(parent: *mut Instruction) -> Option<Box<[Instruction; MAX_ARGS]>> {
-        let child = Instruction {
-            operator: Operator::Working,
-            parent,
-            children: None,
-        };
-        Some(Box::new([child.clone(), child.clone(), child.clone(), child.clone(), child.clone(), child.clone(), child.clone(), child.clone()]))
-    }
-
-    fn calculate(&self) -> Result<Number> {
-        match &self.operator {
-            Operator::Working => Err(anyhow!("Could not parse string")),
-            Operator::Number(number) => {
-                Ok(*number)
-            },
-            Operator::Identity => {
-                let children = self.children.as_ref().unwrap();
-                Ok(children[0].calculate()?)
-            },
-            Operator::Mul => {
-                let children = self.children.as_ref().unwrap();
-                children[0].calculate()?.mul(children[1].calculate()?)
-            },
-            Operator::Div => {
-                let children = self.children.as_ref().unwrap();
-                children[0].calculate()?.div(children[1].calculate()?)
-            },
-            Operator::Add => {
-                let children = self.children.as_ref().unwrap();
-                children[0].calculate()?.add(children[1].calculate()?)
-            },
-            Operator::Sub => {
-                let children = self.children.as_ref().unwrap();
-                children[0].calculate()?.sub(children[1].calculate()?)
-            },
-            Operator::Neg => {
-                let children = self.children.as_ref().unwrap();
-                children[0].calculate()?.neg()
-            },
-            Operator::Expon => {
-                let children = self.children.as_ref().unwrap();
-                children[0].calculate()?.expon(children[1].calculate()?)
-            },
-            Operator::Func(func) => {
-                let children = self.children.as_ref().unwrap();
-                Ok(match func.as_str() {
-                    "sqrt" => {
-                        let n = children[0].calculate()?;
-                        Number { q: n.q.sqrt(), u: Unit::one() * 0.5 }
-                    },
-                    "cbrt" => {
-                        let n = children[0].calculate()?;
-                        Number { q: n.q.sqrt(), u: Unit::one() * (1. / 3.) }
-                    },
-                    "sin" => {
-                        let n = children[0].calculate()?;
-                        if !n.u.is_one() {return Err(anyhow!("Functions should take unitless numbers"));}
-                        Number { q: n.q.sin(), u: Unit::one() }
-                    },
-                    "cos" => {
-                        let n = children[0].calculate()?;
-                        if !n.u.is_one() {return Err(anyhow!("Functions should take unitless numbers"));}
-                        Number { q: n.q.cos(), u: Unit::one() }
-                    },
-                    "tan" => {
-                        let n = children[0].calculate()?;
-                        if !n.u.is_one() {return Err(anyhow!("Functions should take unitless numbers"));}
-                        Number { q: n.q.tan(), u: Unit::one() }
-                    },
-                    "asin" | "arcsin" => {
-                        let n = children[0].calculate()?;
-                        if !n.u.is_one() {return Err(anyhow!("Functions should take unitless numbers"));}
-                        Number { q: n.q.asin(), u: Unit::one() }
-                    },
-                    "acos" | "arccos" => {
-                        let n = children[0].calculate()?;
-                        if !n.u.is_one() {return Err(anyhow!("Functions should take unitless numbers"));}
-                        Number { q: n.q.acos(), u: Unit::one() }
-                    },
-                    "atan" | "arctan" => {
-                        let n = children[0].calculate()?;
-                        if !n.u.is_one() {return Err(anyhow!("Functions should take unitless numbers"));}
-                        Number { q: n.q.atan(), u: Unit::one() }
-                    },
-                    _ => return Err(anyhow!("The function {} is not supported", func))
-                })
-            },
-        }
-    }
-    
-    /// Inserts a new instruction at the closest point in the tree to cursor allowed by the order of operations. The new instruction has operator op and its first child is the child it replaced.
-    fn insert_in_parent(cursor: &mut Instruction, op: Operator) -> &mut Instruction {
-        // Navigate to the closest parent of cursor that contains an operation lower in order or equal to op
-        let mut parent = unsafe {&mut *cursor.parent};
-        let mut child = cursor as *mut Instruction;
-        while parent.operator <= op {
-            child = parent;
-            parent = unsafe {&mut *cursor.parent};
-        }
-        let parent_ptr = parent as *mut Instruction;
-
-        // Get the index of the child to be replaced
-        let children = parent.children.as_mut().unwrap();
-        let mut child_index = 0;
-        while child_index < 8 {
-            if std::ptr::eq(&children[child_index] as *const Instruction, child) { break; }
-            child_index += 1;
-        }
-
-        // Move the child into a list of children for the new struct
-        let mut new_children = Instruction::empty_children(&mut children[child_index]);
-        (*new_children.as_mut().unwrap())[0] = (*children)[child_index].clone();
-
-        // Replace the original child
-        children[child_index] = Instruction {
-            operator: op,
-            parent: parent_ptr,
-            children: new_children,
-        };
-        let new_parent_ptr = &mut children[child_index] as *mut Instruction;
-
-        // Relabel the child's parent pointer
-        children[child_index].children.as_mut().unwrap()[0].parent = new_parent_ptr;
-
-        &mut children[child_index]
-    }
-
-    /// Return the next child in the list
-    fn get_next_child(&self) -> &mut Instruction {
-        let parent = unsafe {&mut *self.parent};
-        let children = parent.children.as_mut().unwrap();
-
-        let mut child_index = 0;
-        while child_index < 8 {
-            if std::ptr::eq(self as *const Instruction, self) { break; }
-            child_index += 1;
-        }
-        child_index += 1;
-        &mut children[child_index]
-    }
-
-    /// Return the next working child in the of this instruction
-    fn get_first_working_child(&mut self) -> &mut Instruction {
-        let children = self.children.as_mut().unwrap();
-        let mut child_index = 0;
-        loop {
-            if let Operator::Working = children[child_index].operator { break; }
-            child_index += 1;
-        }
-        &mut children[child_index]
-    }
-
-    fn get_parent(&self) -> &mut Instruction {
-        unsafe {&mut *self.parent}
+    println!("UNITS: ");
+    for k in UNITS.keys() {
+        println!("{}", k);
     }
 }
 
-fn parse(text: &str) -> Result<Instruction> {
-    let mut output = Instruction::head();
-    let output_ptr = &mut output as *mut Instruction;
-    let children = output.children.as_mut().unwrap().deref_mut();
-    for child in children {
-        child.parent = output_ptr;
-    }
-    let mut cursor = &mut output.children.as_mut().unwrap().deref_mut()[0];
+fn main() -> rustyline::Result<()> {
+    let config = Config::builder()
+        .edit_mode(EditMode::Emacs) // or Vi
+        .auto_add_history(true)
+        .build();
 
-    let mut parentheses_cursors = Vec::new();
+    let mut rl = DefaultEditor::with_config(config)?;
 
-    let mut current_string = "".to_owned();
-    for c in text.chars() {
-        dbg!(c);
-        if ('a' <= c && c <= 'z') || 'A' <= c && c <= 'Z' || c == '_' || c == '.' || ('0' <= c && c <= '9') {
-            current_string.push(c);
-        } else {
-            if !current_string.is_empty() {
-                // Commit the string
-                match Number::parse(&current_string) {
-                    Ok(number) => cursor.operator = Operator::Number(number),
-                    Err(()) => cursor.operator = Operator::Func(current_string),
-                }
-                current_string = "".to_owned();
-            }
-
-            if c == ' ' {continue;}
-
-            // Process the operation
-            if c == '*' {
-                let child = Instruction::insert_in_parent(cursor, Operator::Mul);
-                cursor = child.get_first_working_child();
-            } else if c == '/' {
-                let child = Instruction::insert_in_parent(cursor, Operator::Div);
-                cursor = child.get_first_working_child();
-            } else if c == '+' {
-                let child = Instruction::insert_in_parent(cursor, Operator::Add);
-                cursor = child.get_first_working_child();
-            } else if c == '-' {
-                // TODO handle negation
-                let child = Instruction::insert_in_parent(cursor, Operator::Sub);
-                cursor = child.get_first_working_child();
-            } else if c == '^' {
-                let child = Instruction::insert_in_parent(cursor, Operator::Expon);
-                cursor = child.get_first_working_child();
-            } else if c == '\n' {
-                break;
-            } else if c == ')' {
-                if let Operator::Func(_) = cursor.get_parent().operator {
-                    cursor = cursor.get_parent();
-                } else {
-                    cursor = match parentheses_cursors.pop() {
-                        Some(c) => c,
-                        None => return Err(anyhow!("The ) was not opened")),
-                    };
-                }
-            } else if c == ']' {
-                cursor = match parentheses_cursors.pop() {
-                    Some(c) => c,
-                    None => return Err(anyhow!("The ] was not opened")),
-                };
-            } else if c == '(' {
-                if let Operator::Func(_) = cursor.operator {
-                    // Opening a funcion
-                } else {
-                    let child = Instruction::insert_in_parent(cursor, Operator::Identity);
-                    cursor = child
-                }
-            } else if c == ',' {
-                if let Operator::Func(_) = cursor.get_parent().operator {} else {
-                    return Err(anyhow!("You cannot use , except in a function"))
-                }
-                cursor = cursor.get_next_child();
-            } else {
-                return Err(anyhow!("Unrecognized character {}", c))
-            }
-        }
-    }
-    Ok(output)
-}
-
-
-fn main() {
     loop {
-        print!(">>> ");
-        let _ = std::io::stdout().flush();
-        let mut input = String::new();
-        let _ = std::io::stdin().read_line(&mut input).expect("Did not enter a valid string");
+        match rl.readline(">>> ") {
+            Ok(line) => {
+                if line == "" {continue;}
+                if line == "exit" {break;}
+                if line == "help" {
+                    print_help();
+                    continue;
+                }
+                let parsed = match parse(&line) {
+                    Ok(o) => o,
+                    Err(e) => {
+                        println!("{}", e);
+                        continue;
+                    }
+                };
 
-        if input == "exit\n" {
-            break;
-        }
-        if input == "\n" {
-            continue;
-        }
-    
-        let parsed = match parse(&input) {
-            Ok(o) => o,
-            Err(e) => {
-                println!("{}", e);
-                continue;
+                let number = match parsed.calculate() {
+                    Ok(n) => n,
+                    Err(e) => {
+                        println!("{}", e);
+                        continue;
+                    }
+                };
+
+                println!("{}", number);
             }
-        };
-
-        let number = match parsed.calculate() {
-            Ok(n) => n,
+            Err(rustyline::error::ReadlineError::Eof) => break,
             Err(e) => {
-                println!("{}", e);
-                continue;
+                eprintln!("Error: {:?}", e);
+                break;
             }
-        };
-
-        println!("{}", number);
+        }
     }
+
+    Ok(())
 }
