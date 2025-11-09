@@ -1,6 +1,8 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fs::File, io::{BufReader, BufRead}};
 use lazy_static::lazy_static;
+use clap::{Arg, Command};
 use rustyline::{DefaultEditor, Config, EditMode};
+use std::env;
 
 mod util;
 mod unit;
@@ -113,40 +115,44 @@ fn print_help() {
     }
 }
 
-fn main() -> rustyline::Result<()> {
+fn execute_line(line: &str) {
+    if line == "" {return;}
+    if line == "help" {
+        print_help();
+        return;
+    }
+    let parsed = match parse(&line) {
+        Ok(o) => o,
+        Err(e) => {
+            println!("{}", e);
+            return;
+        }
+    };
+
+    let number = match parsed.calculate() {
+        Ok(n) => n,
+        Err(e) => {
+            println!("{}", e);
+            return;
+        }
+    };
+
+    println!("{}", number);
+}
+
+fn interpreter() {
     let config = Config::builder()
         .edit_mode(EditMode::Emacs) // or Vi
         .auto_add_history(true)
         .build();
 
-    let mut rl = DefaultEditor::with_config(config)?;
+    let mut rl = DefaultEditor::with_config(config).unwrap();
 
     loop {
         match rl.readline(">>> ") {
             Ok(line) => {
-                if line == "" {continue;}
                 if line == "exit" {break;}
-                if line == "help" {
-                    print_help();
-                    continue;
-                }
-                let parsed = match parse(&line) {
-                    Ok(o) => o,
-                    Err(e) => {
-                        println!("{}", e);
-                        continue;
-                    }
-                };
-
-                let number = match parsed.calculate() {
-                    Ok(n) => n,
-                    Err(e) => {
-                        println!("{}", e);
-                        continue;
-                    }
-                };
-
-                println!("{}", number);
+                execute_line(&line);
             }
             Err(rustyline::error::ReadlineError::Eof) => break,
             Err(e) => {
@@ -155,6 +161,44 @@ fn main() -> rustyline::Result<()> {
             }
         }
     }
+}
 
-    Ok(())
+fn execute_file(filename: &str) {
+    let file = match File::open(filename) {
+        Ok(f) => f,
+        Err(_) => {
+            println!("The file {} does not exist", filename);
+            return
+        },
+    };
+    let reader = BufReader::new(file);
+    for line in reader.lines() {
+        let line = line.unwrap();
+        execute_line(&line);
+    }
+}
+
+fn main() {
+    let matches = Command::new("calc")
+        .arg(
+            Arg::new("code")
+                .short('c')
+                .long("code")
+                .value_name("LINE")
+                .help("Run inline code")
+        )
+        .arg(
+            Arg::new("arg")
+                .help("Single argument to execute")
+                .num_args(1),
+        )
+        .get_matches_from(env::args());
+
+    if let Some(code) = matches.get_one::<String>("code") {
+        execute_line(code);
+    } else if let Some(arg) = matches.get_one::<String>("arg") {
+        execute_file(arg);
+    } else {
+        interpreter();
+    }
 }
