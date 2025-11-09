@@ -35,6 +35,7 @@ lazy_static! {
         let mut a: HashMap<&'static str, (fn(f64)->f64, f64)> = HashMap::new();
         a.insert("sqrt", (|x| x.sqrt(), 0.5));
         a.insert("cbrt", (|x| x.cbrt(), 1./3.));
+        a.insert("exp", (|x| x.exp(), 0.));
         a.insert("sin", (|x| x.sin(), 0.));
         a.insert("cos", (|x| x.cos(), 0.));
         a.insert("tan", (|x| x.tan(), 0.));

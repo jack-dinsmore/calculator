@@ -54,13 +54,20 @@ impl Number {
         if s.len() == 0 {
             return Err(());
         }
+
+        // Find the first index of a non-number character
         let mut first_str_index = None;
         for (i, c) in s.chars().enumerate() {
-            if !(('0' <= c && c < '9') || c == '.' || c == '_') {
-                first_str_index = Some(i);
-                break;
+            if '0' <= c && c < '9' {continue;}
+            if let None = first_str_index {
+                if c == '.' || c == '_' || c == 'e' || c == 'E' || c == '-' {
+                    continue;
+                }
             }
+            first_str_index = Some(i);
+            break;
         }
+
         match first_str_index {
             None => {
                 // It's all numbers

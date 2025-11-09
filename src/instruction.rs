@@ -125,7 +125,7 @@ impl Instruction {
         }
     }
     
-    /// Inserts a new instruction at the closest point in the tree to cursor allowed by the order of operations. The new instruction has operator op and its first child is the child it replaced.
+    /// Inserts a new instruction at the closest parent allowed by the order of operations. The new instruction has operator op and its first child is the child it replaced.
     pub fn insert_in_parent(cursor: &mut Instruction, op: Operator) -> &mut Instruction {
         // Navigate to the closest parent of cursor that contains an operation lower in order or equal to op
         let mut parent = unsafe {&mut *cursor.parent};
